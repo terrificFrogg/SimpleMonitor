@@ -122,7 +122,7 @@ public class FolderMonitor {
                         logger.info("[CREATED] Detected new file: {}", createdFilePath.toAbsolutePath());
                         scheduleFileMove(createdFilePath);
                     } else if (Files.isDirectory(createdFilePath)) {
-                        logger.info("[CREATED] Detected new directory (not moving): {}", createdFilePath.toAbsolutePath());
+                        logger.info("[CREATED] Detected new directory (will not {}): {}", action.toString(), createdFilePath.toAbsolutePath());
                     }
                 }
             }
@@ -176,10 +176,10 @@ public class FolderMonitor {
                         }
                     }
                 } else {
-                    logger.info("[SKIPPED] File '{}' no longer exists in source, skipping move.", filePath.getFileName());
+                    logger.info("[SKIPPED] File '{}' no longer exists in source, skipping {}.", filePath.getFileName(), action.toString());
                 }
             } catch (IOException e) {
-                logger.error("[ERROR] Failed to {} this file {} Error message: {}", action.toString(), filePath.getFileName(), e.getMessage());
+                logger.error("[ERROR] Failed to {} '{}' | ", action.toString(), filePath.getFileName(), e);
             }
         }, delayMinutes, timeUnit);
     }
