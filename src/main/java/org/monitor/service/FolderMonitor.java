@@ -4,10 +4,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.monitor.model.Action;
 import org.monitor.model.Config;
+import org.monitor.model.FileInfo;
+import org.monitor.util.FileHasher;
 
 import java.io.IOException;
 import java.nio.file.*;
 import static java.nio.file.StandardWatchEventKinds.*;
+
+import java.nio.file.attribute.FileTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +28,8 @@ public class FolderMonitor {
     private final int delayMinutes; // Delay before moving the file
     private final TimeUnit timeUnit;
     private final Action action;
+    private final Map<String, String> fileInfoHashMap;
+    private final String ALGORITHM = "MD5";
 
     /**
      * Creates a WatchService and registers the given directory.
@@ -31,6 +39,7 @@ public class FolderMonitor {
      * @throws IOException If an I/O error occurs during setup.
      */
     public FolderMonitor(Config config) throws IOException {
+        this.fileInfoHashMap = new HashMap<>();
         this.delayMinutes = config.delay();
         this.timeUnit = config.timeUnit();
         this.action = config.action();
@@ -120,7 +129,16 @@ public class FolderMonitor {
                     // This is important because WatchService also fires events for directory creation
                     if (Files.isRegularFile(createdFilePath)) {
                         logger.info("[CREATED] Detected new file: {}", createdFilePath.toAbsolutePath());
-                        scheduleFileMove(createdFilePath);
+
+                        try {
+                            String fileHash = FileHasher.hashFile(createdFilePath.toFile(), ALGORITHM);
+                            fileInfoHashMap.put(fileHash, String.valueOf(createdFilePath.getFileSystem()));
+                            scheduleFileMove(createdFilePath);
+                        } catch (Exception e) {
+                            logger.error(e);
+                            throw new RuntimeException(e);
+                        }
+
                     } else if (Files.isDirectory(createdFilePath)) {
                         logger.info("[CREATED] Detected new directory (will not {}): {}", action.toString(), createdFilePath.toAbsolutePath());
                     }
@@ -158,28 +176,35 @@ public class FolderMonitor {
                 Path destinationPath = archiveDir.resolve(filePath.getFileName());
 
                 // Check if the file still exists in the source directory before moving
+                String fileHash = FileHasher.hashFile(filePath.toFile(), ALGORITHM);
                 if (Files.exists(filePath)) {
-                    switch (action){
-                        case MOVE -> {
-                            Files.move(filePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
-                            logger.info("[MOVED] Successfully archived '{}' to '{}'", filePath.getFileName(), destinationPath.toAbsolutePath());
-                        }
+                    if(fileInfoHashMap.containsKey(fileHash)){
+                        switch (action) {
+                            case MOVE -> {
+                                Files.move(filePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+                                logger.info("[MOVED] Successfully archived '{}' to '{}'", filePath.getFileName(), destinationPath.toAbsolutePath());
+                            }
 
-                        case COPY -> {
-                            Files.copy(filePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
-                            logger.info("[COPY] Successfully archived '{}' to '{}'", filePath.getFileName(), destinationPath.toAbsolutePath());
-                        }
+                            case COPY -> {
+                                Files.copy(filePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+                                logger.info("[COPY] Successfully archived '{}' to '{}'", filePath.getFileName(), destinationPath.toAbsolutePath());
+                            }
 
-                        case DELETE -> {
-                            Files.deleteIfExists(filePath);
-                            logger.info("[DELETE] Successfully deleted '{}'", filePath.getFileName());
+                            case DELETE -> {
+                                Files.deleteIfExists(filePath);
+                                logger.info("[DELETE] Successfully deleted '{}'", filePath.getFileName());
+                            }
                         }
+                        fileInfoHashMap.remove(fileHash);
                     }
                 } else {
                     logger.info("[SKIPPED] File '{}' no longer exists in source, skipping {}.", filePath.getFileName(), action.toString());
                 }
             } catch (IOException e) {
                 logger.error("[ERROR] Failed to {} '{}' | ", action.toString(), filePath.getFileName(), e);
+            } catch (Exception e) {
+                logger.error(e);
+                throw new RuntimeException(e);
             }
         }, delayMinutes, timeUnit);
     }
