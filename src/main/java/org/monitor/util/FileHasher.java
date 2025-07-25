@@ -1,16 +1,19 @@
 package org.monitor.util;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.io.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 
 public class FileHasher {
+    private static final Logger logger = LogManager.getLogger();
+
     public static Optional<String> hashFile(File file, String algorithm){
-        MessageDigest digest = null;
-        Optional<String> optionalHash = Optional.empty();
         try {
-            digest = MessageDigest.getInstance(algorithm);
+            MessageDigest digest = MessageDigest.getInstance(algorithm);
             try (InputStream fis = new FileInputStream(file)) {
                 byte[] buffer = new byte[8192]; // 8KB buffer
                 int bytesRead;
@@ -18,15 +21,16 @@ public class FileHasher {
                     digest.update(buffer, 0, bytesRead);
                 }
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                logger.warn("Unable to hash file. Error: {}", e.getMessage());
+                return Optional.empty();
             }
 
             byte[] hashBytes = digest.digest();
-            return bytesToHex(hashBytes);
+            return Optional.of(bytesToHex(hashBytes));
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
+            logger.error(e);
+            return Optional.empty();
         }
-        return optionalHash;
     }
 
     private static String bytesToHex(byte[] bytes) {

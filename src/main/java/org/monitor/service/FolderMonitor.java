@@ -4,16 +4,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.monitor.model.Action;
 import org.monitor.model.Config;
-import org.monitor.model.FileInfo;
 import org.monitor.util.FileHasher;
 
 import java.io.IOException;
 import java.nio.file.*;
 import static java.nio.file.StandardWatchEventKinds.*;
 
-import java.nio.file.attribute.FileTime;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -28,8 +25,7 @@ public class FolderMonitor {
     private final int delayMinutes; // Delay before moving the file
     private final TimeUnit timeUnit;
     private final Action action;
-    private final Map<String, String> fileInfoHashMap;
-    private final String ALGORITHM = "MD5";
+    private static final String ALGORITHM = "MD5";
 
     /**
      * Creates a WatchService and registers the given directory.
@@ -39,7 +35,6 @@ public class FolderMonitor {
      * @throws IOException If an I/O error occurs during setup.
      */
     public FolderMonitor(Config config) throws IOException {
-        this.fileInfoHashMap = new HashMap<>();
         this.delayMinutes = config.delay();
         this.timeUnit = config.timeUnit();
         this.action = config.action();
@@ -129,16 +124,10 @@ public class FolderMonitor {
                     // This is important because WatchService also fires events for directory creation
                     if (Files.isRegularFile(createdFilePath)) {
                         logger.info("[CREATED] Detected new file: {}", createdFilePath.toAbsolutePath());
-
-                        try {
-                            String fileHash = FileHasher.hashFile(createdFilePath.toFile(), ALGORITHM);
-                            fileInfoHashMap.put(fileHash, String.valueOf(createdFilePath.getFileSystem()));
-                            scheduleFileMove(createdFilePath);
-                        } catch (Exception e) {
-                            logger.error(e);
-                            throw new RuntimeException(e);
-                        }
-
+                        Optional<String> optional = FileHasher.hashFile(createdFilePath.toFile(), ALGORITHM);
+                        optional.ifPresent(fileHash -> {
+                            scheduleFileMove(createdFilePath, fileHash);
+                        });
                     } else if (Files.isDirectory(createdFilePath)) {
                         logger.info("[CREATED] Detected new directory (will not {}): {}", action.toString(), createdFilePath.toAbsolutePath());
                     }
@@ -159,7 +148,7 @@ public class FolderMonitor {
      *
      * @param filePath The path of the file to be moved.
      */
-    private void scheduleFileMove(Path filePath) {
+    private void scheduleFileMove(Path filePath, String fileHash) {
         switch (action){
             case MOVE, COPY -> {
                 logger.info("Scheduling {} for '{}' to archive in {} {}.", action.toString(), filePath.getFileName(), delayMinutes, timeUnit.toString().toLowerCase());
@@ -175,10 +164,14 @@ public class FolderMonitor {
                 // Construct the destination path in the archive directory
                 Path destinationPath = archiveDir.resolve(filePath.getFileName());
 
-                // Check if the file still exists in the source directory before moving
-                String fileHash = FileHasher.hashFile(filePath.toFile(), ALGORITHM);
-                if (Files.exists(filePath)) {
-                    if(fileInfoHashMap.containsKey(fileHash)){
+                /*
+                 Check if the file still exists in the source directory before moving.
+                 Files.exists might return true even though the file contents are now different.
+                 Checking against file hash will confirm we're still operating on the original file.
+                */
+                Optional<String> optional = FileHasher.hashFile(filePath.toFile(), ALGORITHM);
+                if (Files.exists(filePath) && optional.isPresent()) {
+                    if(optional.get().equals(fileHash)){
                         switch (action) {
                             case MOVE -> {
                                 Files.move(filePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
@@ -195,7 +188,8 @@ public class FolderMonitor {
                                 logger.info("[DELETE] Successfully deleted '{}'", filePath.getFileName());
                             }
                         }
-                        fileInfoHashMap.remove(fileHash);
+                    }else{
+                        logger.info("File Hash for '{}' doesn't match original. Skipping file.", filePath.getFileName());
                     }
                 } else {
                     logger.info("[SKIPPED] File '{}' no longer exists in source, skipping {}.", filePath.getFileName(), action.toString());
