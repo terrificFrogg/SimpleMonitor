@@ -1,17 +1,17 @@
 {
 	"configs": [
 		{
-			"sourceFolder": "C:\\Dev\\FolderMonitorTesting\\Source 1",
-			"archiveFolder": "C:\\Dev\\FolderMonitorTesting\\ArchiveFolder",
+			"sourceFolder": "D:\\Dev\\FolderMonitorTesting\\Source 1",
+			"archiveFolder": "D:\\Dev\\FolderMonitorTesting\\ArchiveFolder",
 			"action": "MOVE",
-			"delay": 5,
+			"delay": 30,
 			"timeUnit": "SECONDS"
 		},
 		{
-			"sourceFolder": "C:\\Dev\\FolderMonitorTesting\\Source 2",
-			"archiveFolder": "C:\\Dev\\FolderMonitorTesting\\ArchiveFolder",
+			"sourceFolder": "D:\\Dev\\FolderMonitorTesting\\Source 2",
+			"archiveFolder": "D:\\Dev\\FolderMonitorTesting\\ArchiveFolder",
 			"action": "MOVE",
-			"delay": 5,
+			"delay": 30,
 			"timeUnit": "SECONDS"
 		}
 	]

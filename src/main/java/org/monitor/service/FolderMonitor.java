@@ -71,19 +71,7 @@ public class FolderMonitor {
                 archiveDir.toAbsolutePath(), delayMinutes, timeUnit.toString().toLowerCase());
 
         // Add a shutdown hook to gracefully terminate the scheduler when the JVM exits
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            scheduler.shutdown();
-            try {
-                if (!scheduler.awaitTermination(60, TimeUnit.SECONDS)) {
-                    scheduler.shutdownNow();
-                    logger.error("Scheduler did not terminate in time, forced shutdown.");
-                }
-            } catch (InterruptedException e) {
-                scheduler.shutdownNow();
-                Thread.currentThread().interrupt();
-                logger.error("Scheduler shutdown interrupted.");
-            }
-        }));
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
 
     /**
@@ -140,6 +128,20 @@ public class FolderMonitor {
                 logger.info("Watch key no longer valid. Monitored directory might have been deleted or unaccessible. Exiting monitoring.");
                 break;
             }
+        }
+    }
+
+    public void shutdown(){
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(60, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+                logger.error("Scheduler did not terminate in time, forced shutdown.");
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+            logger.error("Scheduler shutdown interrupted.");
         }
     }
 
