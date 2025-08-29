@@ -10,9 +10,13 @@ import java.util.Optional;
 
 public class FileHasher {
     private static final Logger logger = LogManager.getLogger();
+    public static String ALGO_MD5 = "MD5";
 
     public static Optional<String> hashFile(File file, String algorithm){
         try {
+            if (algorithm.isBlank())
+                    algorithm = ALGO_MD5;
+
             MessageDigest digest = MessageDigest.getInstance(algorithm);
             try (InputStream fis = new FileInputStream(file)) {
                 byte[] buffer = new byte[8192]; // 8KB buffer

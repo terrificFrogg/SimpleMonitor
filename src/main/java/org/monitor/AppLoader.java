@@ -5,10 +5,13 @@ import org.apache.logging.log4j.Logger;
 import org.monitor.model.Config;
 import org.monitor.model.ConfigCollection;
 import org.monitor.service.ConfigParser;
+import org.monitor.service.FileSystemMonitor;
 import org.monitor.service.FolderMonitor;
+import org.monitor.service.MonitorService;
 import org.monitor.util.FileIO;
 
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -36,8 +39,19 @@ public class AppLoader {
                         if(config != null){
                             callableList.add(() -> {
                                 try {
-                                    FolderMonitor folderMonitor = new FolderMonitor(config);
-                                    folderMonitor.startMonitoring();
+                                    FileSystemMonitor fsm = new FileSystemMonitor.Builder()
+                                            .withMonitoredPath(Path.of(config.sourceFolder()))
+                                            .withWatchService(FileSystems.getDefault().newWatchService())
+                                            .build();
+
+                                    MonitorService monitorService = new MonitorService.Builder()
+                                            .withFileSystemMonitor(fsm)
+                                            .withConfig(config)
+                                            .withLogger(logger)
+                                            .withScheduledExecutorService(Executors.newSingleThreadScheduledExecutor())
+                                            .build();
+
+                                    monitorService.startMonitor();
                                 } catch (IOException e) {
                                     logger.error("Error: {}", e.getMessage());
                                 }

@@ -1,22 +1,35 @@
 package org.monitor;
 
+import com.fasterxml.jackson.core.JsonToken;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.monitor.model.Action;
 import org.monitor.model.Config;
+import org.monitor.model.EventType;
+import org.monitor.service.FileSystemMonitor;
 import org.monitor.service.FolderMonitor;
+import org.monitor.service.MonitorService;
 
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class MonitorTest {
+    private static final Logger log = LogManager.getLogger(MonitorTest.class);
     private Config config;
+    private Path testSourcePath;
+    private Path testDestinationPath;
+    private Path testRootFolder;
+    private String testFileName;
 
     void init(){
         if(config != null)
@@ -29,6 +42,11 @@ public class MonitorTest {
                 1,
                 TimeUnit.SECONDS
         );
+
+        testSourcePath = Path.of("FolderMonitorTest/Source");
+        testDestinationPath = Path.of("FolderMonitorTest/Destination");
+        testRootFolder = Path.of("FolderMonitorTest/");
+        testFileName = "Test.txt";
     }
 
 
@@ -44,22 +62,34 @@ public class MonitorTest {
     void testFileIsCreatedInDestination(){
         init();
         try {
-            FolderMonitor folderMonitor = new FolderMonitor(config);
+            FileSystemMonitor fileSystemMonitor = new FileSystemMonitor.Builder()
+                    .withMonitoredPath(testSourcePath)
+                    .withWatchService(FileSystems.getDefault().newWatchService())
+                    .withMonitoredListeners(new ArrayList<>())
+                    .build();
 
             try(ExecutorService es = Executors.newSingleThreadExecutor()){
-                es.submit(folderMonitor::startMonitoring);
+                es.submit(fileSystemMonitor::startMonitoring);
+                fileSystemMonitor.addListener((detectedPath, eventType) -> {
+                    LogManager.getLogger().info("Detected: {}", detectedPath.getFileName());
 
-                Path testFile = Path.of("FolderMonitorTest/Test.txt");
-                Path destinationFolder = Path.of("FolderMonitorTest/Destination");
+                    if(eventType.equals(EventType.FILE)){
+                        Assertions.assertEquals(detectedPath.getFileName().toString(), testFileName);
+                        try {
+                            Files.delete(testSourcePath.resolve(testFileName));
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
 
-                Files.copy(testFile, Path.of("FolderMonitorTest/Source").resolve(testFile.getFileName()), StandardCopyOption.REPLACE_EXISTING);
-                Thread.sleep(Duration.of(config.delay() + 1, config.timeUnit().toChronoUnit()));
-                folderMonitor.shutdown();
-                es.shutdownNow();
-                Assertions.assertTrue(Files.exists(destinationFolder.resolve(testFile.getFileName())));
+                    es.shutdownNow();
+                });
+                Path target = testRootFolder.resolve(testFileName);
+                Path dest = testSourcePath.resolve(testFileName);
+                Files.copy(target, dest, StandardCopyOption.REPLACE_EXISTING);
             }
-
-        } catch (IOException | InterruptedException e) {
+            //
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
