@@ -110,15 +110,17 @@ public class FileSystemMonitor {
                 // We are only interested in ENTRY_CREATE events
                 if (kind == ENTRY_CREATE) {
                     WatchEvent<Path> ev = (WatchEvent<Path>) event;
-                    Path filename = ev.context(); // The name of the created file/directory
-
-                    // Resolve the full path of the newly created file/directory
-                    Path createdFilePath = monitoredPath.resolve(filename);
-
+                    Path createdFilePath = monitoredPath.resolve(ev.context()); // The name of the created file/directory
                     // Check if it's a regular file (not a directory)
                     // This is important because WatchService also fires events for directory creation
                     if (Files.isRegularFile(createdFilePath)) {
-                        notify(createdFilePath, EventType.FILE);
+                        try {
+                            waitForFile(createdFilePath);
+                            notify(createdFilePath, EventType.FILE);
+                        } catch (IOException | InterruptedException e) {
+                            logger.error(e);
+                            throw new RuntimeException(e);
+                        }
                     } else if (Files.isDirectory(createdFilePath)) {
                         notify(createdFilePath, EventType.FOLDER);
                     }
@@ -141,5 +143,20 @@ public class FileSystemMonitor {
                 monitorListener.onDetected(detectedPath, eventType);
             }
         });
+    }
+
+    /**
+     * Waits until a file stops changing size (i.e., finished being written).
+     */
+    private void waitForFile(Path file) throws IOException, InterruptedException {
+        long previousSize = -1L;
+        long currentSize = Files.size(file);
+
+        // Keep looping until size stabilizes
+        while (previousSize != currentSize) {
+            previousSize = currentSize;
+            Thread.sleep(500); // half a second delay
+            currentSize = Files.size(file);
+        }
     }
 }

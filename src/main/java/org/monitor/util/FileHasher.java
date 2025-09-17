@@ -25,11 +25,12 @@ public class FileHasher {
                     digest.update(buffer, 0, bytesRead);
                 }
             } catch (IOException e) {
-                logger.warn("Unable to hash file. Error: {}", e.getMessage());
+                logger.error("Unable to hash file. Error: {}", e.getMessage());
                 return Optional.empty();
             }
 
             byte[] hashBytes = digest.digest();
+            digest.reset();
             return Optional.of(bytesToHex(hashBytes));
         } catch (NoSuchAlgorithmException e) {
             logger.error(e);

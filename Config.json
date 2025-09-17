@@ -3,15 +3,15 @@
 		{
 			"sourceFolder": "C:\\Dev\\FolderMonitorTesting\\Source 1",
 			"archiveFolder": "C:\\Dev\\FolderMonitorTesting\\ArchiveFolder",
-			"action": "MOVE",
-			"delay": 30,
+			"action": "COPY",
+			"delay": 2,
 			"timeUnit": "SECONDS"
 		},
 		{
 			"sourceFolder": "C:\\Dev\\FolderMonitorTesting\\Source 2",
 			"archiveFolder": "C:\\Dev\\FolderMonitorTesting\\ArchiveFolder",
-			"action": "MOVE",
-			"delay": 30,
+			"action": "COPY",
+			"delay": 2,
 			"timeUnit": "SECONDS"
 		}
 	]
