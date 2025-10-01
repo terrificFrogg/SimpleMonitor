@@ -131,18 +131,13 @@ public class FileSystemMonitor {
             boolean valid = key.reset();
             if (!valid) {
                 logger.info("Watch key no longer valid. Monitored directory might have been deleted or unaccessible. Exiting monitoring.");
-                break;
+                monitorListeners.forEach(MonitorListener::onMonitorFailed);
             }
         }
     }
 
     private void notify(Path detectedPath, EventType eventType){
-        monitorListeners.forEach(new Consumer<MonitorListener>() {
-            @Override
-            public void accept(MonitorListener monitorListener) {
-                monitorListener.onDetected(detectedPath, eventType);
-            }
-        });
+        monitorListeners.forEach(monitorListener -> monitorListener.onDetected(detectedPath, eventType));
     }
 
     /**
@@ -157,6 +152,14 @@ public class FileSystemMonitor {
             previousSize = currentSize;
             Thread.sleep(500); // half a second delay
             currentSize = Files.size(file);
+        }
+    }
+
+    public void close(){
+        try {
+            watchService.close();
+        } catch (IOException e) {
+            logger.error("[FileSystemMonitor] Error when closing WatchService: {}", e.getMessage());
         }
     }
 }

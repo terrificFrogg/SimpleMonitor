@@ -21,6 +21,7 @@ public class MonitorService implements MonitorListener {
     private final Config config;
     private final FileSystemMonitor fileSystemMonitor;
     private final ScheduledExecutorService scheduledExecutorService;
+    private int restartCounter;
 
     public MonitorService(MonitorService.Builder builder){
         this.config = builder.config;
@@ -28,6 +29,7 @@ public class MonitorService implements MonitorListener {
         this.scheduledExecutorService = builder.scheduledExecutorService;
         this.logger = builder.logger;
         this.fileSystemMonitor.addListener(this);
+        restartCounter = 0;
     }
 
     public static class Builder{
@@ -93,6 +95,16 @@ public class MonitorService implements MonitorListener {
         }
     }
 
+    @Override
+    public void onMonitorFailed() {
+        logger.info("Restarting monitoring");
+        this.fileSystemMonitor.startMonitoring();
+        restartCounter++;
+        if(restartCounter == 2){
+            shutdown();
+        }
+    }
+
     private void schedule(Path filePath, String fileHash){
         switch (config.action()){
             case MOVE, COPY -> {
@@ -141,7 +153,7 @@ public class MonitorService implements MonitorListener {
                             filePath.getFileName(), config.action().toString());
                 }
             } catch (IOException e) {
-                logger.error("[ERROR] Failed to {} '{}' | ", config.action().toString(), filePath.getFileName(), e);
+                logger.error("Failed to {} '{}' | ", config.action().toString(), filePath.getFileName(), e);
             } catch (Exception e) {
                 logger.error(e);
                 throw new RuntimeException(e);
@@ -150,6 +162,7 @@ public class MonitorService implements MonitorListener {
     }
 
     public void shutdown(){
+        fileSystemMonitor.close();
         scheduledExecutorService.shutdown();
         try {
             if (!scheduledExecutorService.awaitTermination(5, TimeUnit.SECONDS)) {
