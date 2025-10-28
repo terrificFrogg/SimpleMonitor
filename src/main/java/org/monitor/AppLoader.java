@@ -41,7 +41,6 @@ public class AppLoader {
                                 try {
                                     FileSystemMonitor fsm = new FileSystemMonitor.Builder()
                                             .withMonitoredPath(Path.of(config.sourceFolder()))
-                                            .withWatchService(FileSystems.getDefault().newWatchService())
                                             .build();
 
                                     MonitorService monitorService = new MonitorService.Builder()

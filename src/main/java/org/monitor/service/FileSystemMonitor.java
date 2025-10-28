@@ -19,33 +19,33 @@ public class FileSystemMonitor {
 
     private final List<MonitorListener> monitorListeners;
     private final Path monitoredPath;
-    private final WatchService watchService;
+    private WatchService watchService;
 
-    public FileSystemMonitor(FileSystemMonitor.Builder builder) throws IOException {
+    public FileSystemMonitor(FileSystemMonitor.Builder builder) {
         monitorListeners = builder.monitorListeners;
         this.monitoredPath = builder.monitoredPath;
-        this.watchService = builder.watchService;
 
         if(!Files.exists(monitoredPath) || !Files.isDirectory(monitoredPath)){
             logger.error("'{}' must exist and be a directory", monitoredPath);
             throw new IllegalArgumentException("Path must exist and be a directory.");
         }
+    }
 
-        this.monitoredPath.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+    public void registerWatchService(){
+        try{
+            this.watchService = FileSystems.getDefault().newWatchService();
+            this.monitoredPath.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+        } catch (IOException e) {
+            logger.error("[FileSystemMonitor] Register Watch Service: {}", e.getMessage());
+        }
     }
 
     public static class Builder{
         private List<MonitorListener> monitorListeners;
         private Path monitoredPath;
-        private WatchService watchService;
 
         public Builder withMonitoredPath(Path monitoredPath){
             this.monitoredPath = monitoredPath;
-            return this;
-        }
-
-        public Builder withWatchService(WatchService watchService){
-            this.watchService = watchService;
             return this;
         }
 
@@ -57,15 +57,6 @@ public class FileSystemMonitor {
         public FileSystemMonitor build() throws IOException {
             if(monitorListeners == null){
                 this.monitorListeners = new ArrayList<>();
-            }
-
-            if(watchService == null){
-                try {
-                    this.watchService = FileSystems.getDefault().newWatchService();
-                } catch (IOException e) {
-                    logger.error(e);
-                    throw new RuntimeException(e);
-                }
             }
 
             if(monitoredPath == null){
@@ -86,8 +77,8 @@ public class FileSystemMonitor {
      */
     public void startMonitoring() {
         logger.info("Monitoring '{}' for new entries", monitoredPath);
+        WatchKey key;
         while (true) {
-            WatchKey key;
             try {
                 // Retrieve the next queued watch key, waiting indefinitely
                 key = watchService.take();
@@ -109,8 +100,7 @@ public class FileSystemMonitor {
 
                 // We are only interested in ENTRY_CREATE events
                 if (kind == ENTRY_CREATE) {
-                    WatchEvent<Path> ev = (WatchEvent<Path>) event;
-                    Path createdFilePath = monitoredPath.resolve(ev.context()); // The name of the created file/directory
+                    Path createdFilePath = monitoredPath.resolve((Path) event.context()); // The name of the created file/directory
                     // Check if it's a regular file (not a directory)
                     // This is important because WatchService also fires events for directory creation
                     if (Files.isRegularFile(createdFilePath)) {
@@ -128,9 +118,9 @@ public class FileSystemMonitor {
             }
 
             // Reset the key. If the key is no longer valid, the loop will exit.
-            boolean valid = key.reset();
-            if (!valid) {
+            if (!key.reset()) {
                 logger.info("Watch key no longer valid. Monitored directory might have been deleted or unaccessible. Exiting monitoring.");
+                close();
                 monitorListeners.forEach(MonitorListener::onMonitorFailed);
             }
         }

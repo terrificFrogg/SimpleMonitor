@@ -79,7 +79,8 @@ public class MonitorService implements MonitorListener {
         }
     }
 
-    public void startMonitor(){
+    public void startMonitor() throws IOException {
+        this.fileSystemMonitor.registerWatchService();
         this.fileSystemMonitor.startMonitoring();
     }
 
@@ -98,6 +99,7 @@ public class MonitorService implements MonitorListener {
     @Override
     public void onMonitorFailed() {
         logger.info("Restarting monitoring");
+        this.fileSystemMonitor.registerWatchService();
         this.fileSystemMonitor.startMonitoring();
         restartCounter++;
         if(restartCounter == 2){

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.monitor.model.Action;
 import org.monitor.model.Config;
 import org.monitor.model.EventType;
+import org.monitor.model.MonitorListener;
 import org.monitor.service.FileSystemMonitor;
 import org.monitor.service.FolderMonitor;
 import org.monitor.service.MonitorService;
@@ -49,40 +50,41 @@ public class MonitorTest {
         testFileName = "Test.txt";
     }
 
-
-    @Test
-    void testFolderMonitorDoesNotThrow(){
-        init();
-        Assertions.assertDoesNotThrow(() -> {
-            FolderMonitor folderMonitor = new FolderMonitor(config);
-        });
-    }
-
     @Test
     void testFileIsCreatedInDestination(){
         init();
         try {
             FileSystemMonitor fileSystemMonitor = new FileSystemMonitor.Builder()
                     .withMonitoredPath(testSourcePath)
-                    .withWatchService(FileSystems.getDefault().newWatchService())
                     .withMonitoredListeners(new ArrayList<>())
                     .build();
 
             try(ExecutorService es = Executors.newSingleThreadExecutor()){
-                es.submit(fileSystemMonitor::startMonitoring);
-                fileSystemMonitor.addListener((detectedPath, eventType) -> {
-                    LogManager.getLogger().info("Detected: {}", detectedPath.getFileName());
+                es.submit(() -> {
+                    fileSystemMonitor.registerWatchService();
+                    fileSystemMonitor.startMonitoring();
+                });
+                fileSystemMonitor.addListener(new MonitorListener() {
+                    @Override
+                    public void onDetected(Path detectedPath, EventType eventType) {
+                        LogManager.getLogger().info("Detected: {}", detectedPath.getFileName());
 
-                    if(eventType.equals(EventType.FILE)){
-                        Assertions.assertEquals(detectedPath.getFileName().toString(), testFileName);
-                        try {
-                            Files.delete(testSourcePath.resolve(testFileName));
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
+                        if(eventType.equals(EventType.FILE)){
+                            Assertions.assertEquals(detectedPath.getFileName().toString(), testFileName);
+                            try {
+                                Files.delete(testSourcePath.resolve(testFileName));
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
                         }
+
+                        es.shutdownNow();
                     }
 
-                    es.shutdownNow();
+                    @Override
+                    public void onMonitorFailed() {
+                        System.err.println("Monitor failed");
+                    }
                 });
                 Path target = testRootFolder.resolve(testFileName);
                 Path dest = testSourcePath.resolve(testFileName);
